@@ -101,7 +101,7 @@ dependencies = [
 [[package]]
 name = "heroui"
 version = "0.1.16"
-source = "git+https://github.com/HeroineOS/HeroUI#ca0914098dd9489e0eb694ac6f901e9fc127fd80"
+source = "git+https://github.com/HeroineOS/HeroUI#95e1266b40735c98a8277287b382fa8923cd3c68"
 dependencies = [
  "fltk",
  "fltk-sys",

@@ -10,14 +10,16 @@ use request::{Mode, Request};
 
 fn usage() -> ! {
     println!(
-        "heroportal {}
+        "heroportal {} - the HeroineOS desktop portal (open and save dialogs)
 
 Usage:
   heroportal                 the portal backend (D-Bus starts it when needed)
-  heroportal open [--multiple] [--folder] [--title T]
-  heroportal save [--name NAME] [--title T]
+  heroportal open [--multiple] [--folder] [--title T] [--in FOLDER]
+  heroportal save [--name NAME] [--title T] [--in FOLDER]
                              show a dialog; print the chosen paths
-  heroportal --dialog        a dialog for the request (JSON) on stdin",
+  heroportal --dialog        a dialog for the request (JSON) on stdin
+  heroportal --version
+  heroportal --help",
         env!("CARGO_PKG_VERSION")
     );
     std::process::exit(0)
@@ -59,6 +61,10 @@ fn main() {
             dialog::run(req, true)
         }
         Some("-V" | "--version") => println!("heroportal {}", env!("CARGO_PKG_VERSION")),
-        Some(_) => usage(),
+        Some("-h" | "--help") => usage(),
+        Some(other) => {
+            eprintln!("heroportal: unknown argument {other:?} (see --help)");
+            std::process::exit(2);
+        }
     }
 }
