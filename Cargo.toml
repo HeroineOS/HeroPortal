@@ -1,6 +1,6 @@
 [package]
 name = "heroportal"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Desktop portal for HeroineOS: a lightweight file chooser (open/save dialogs) for every app"
 license = "MIT"
