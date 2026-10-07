@@ -82,7 +82,7 @@ dependencies = [
 [[package]]
 name = "fltk-sys"
 version = "1.5.23"
-source = "git+https://github.com/HeroineOS/fltk-sys#d6ddb17601e9741f179f4c9cb6290e8966cf0269"
+source = "git+https://github.com/HeroineOS/fltk-sys#af9fa32b6f740c812e5a213bb1ede2c5aedb8bf6"
 dependencies = [
  "cmake",
  "cmk",
@@ -100,9 +100,10 @@ dependencies = [
 
 [[package]]
 name = "heroui"
-version = "0.1.16"
-source = "git+https://github.com/HeroineOS/HeroUI#95e1266b40735c98a8277287b382fa8923cd3c68"
+version = "0.1.17"
+source = "git+https://github.com/HeroineOS/HeroUI#ec55e4d010f69ad8c93c29d61e28880f1fa4d458"
 dependencies = [
+ "dbus",
  "fltk",
  "fltk-sys",
 ]
