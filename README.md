@@ -41,8 +41,9 @@ HeroWM's portal choices plus `FileChooser=hero`. Elsewhere, add to
 org.freedesktop.impl.portal.FileChooser=hero
 ```
 
-**Firefox** uses the portal's dialogs only when told to, outside Flatpak/Snap: in
-`about:config`, set `widget.use-xdg-desktop-portal.file-picker` to `1`.
+Firefox picks it up on its own once the portal offers it. If an app still shows its own
+dialog, it isn't asking the portal: for Firefox that's `widget.use-xdg-desktop-portal.file-picker`
+= `1` in `about:config`; GTK apps take `GTK_USE_PORTAL=1`.
 
 The portal (and HeroPortal) need to know the Wayland display: start HeroWM with
 `--session`, or run `dbus-update-activation-environment --systemd WAYLAND_DISPLAY
