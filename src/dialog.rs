@@ -1,9 +1,12 @@
 //! The open/save dialog. Runs as a process of its own per request; prints
 //! the answer and exits.
 //!
-//! Keys: arrows, Page Up/Down, Home/End move; Enter opens a folder or
-//! chooses; Backspace or Alt+Up goes to the parent folder; Ctrl+H shows
-//! hidden files; Escape cancels. Click, Ctrl+click and Shift+click select
+//! Keys: the main button (Open/Save) has the focus, so Enter chooses; Tab,
+//! Shift+Tab, Left and Right move between buttons and fields. Up/Down, Page
+//! Up/Down, Home/End move in the files, and Enter then opens the folder or
+//! chooses the file there. Backspace or Alt+Up goes to the parent folder;
+//! Ctrl+H shows hidden files; Escape cancels. In a save dialog, typing
+//! goes to the name. Click, Ctrl+click and Shift+click select
 //! (several when the app allows), double-click opens.
 
 use std::cell::{Cell, RefCell};
@@ -394,7 +397,7 @@ impl App for Dialog {
             ])
             .fixed(34),
             row(vec![column(places).spacing(2).fixed(170), scroll(vec![file_list()])]),
-            row(vec![label("Name").fixed(60), text_input_submit(|d: &Dialog| d.name.clone(), Msg::Name, Msg::Accept)])
+            row(vec![label("Name").fixed(60), remember_name_field(text_input_submit(|d: &Dialog| d.name.clone(), Msg::Name, Msg::Accept))])
                 .fixed(34)
                 .visible(move |_: &Dialog| save),
             row(vec![
@@ -413,7 +416,7 @@ impl App for Dialog {
                 dropdown(|d: &Dialog| &d.filter_names[..], |d: &Dialog| d.filter, Msg::Filter).fixed(220).visible(move |_: &Dialog| has_filters),
                 toggle("Hidden", |d: &Dialog| d.hidden, Msg::Hidden).fixed(120),
                 button("Cancel", Msg::Cancel).fixed(100),
-                primary_button(&self.accept_label(), Msg::Accept).fixed(110),
+                primary_button(&self.accept_label(), Msg::Accept).fixed(110).autofocus(),
             ])
             .fixed(34)
             .visible(|d: &Dialog| d.confirm.is_none()),
@@ -587,6 +590,29 @@ fn file_list() -> Element<Dialog, Msg> {
                 let k = app::event_key();
                 let st = app::event_state();
                 let typing = app::focus().is_some_and(|w| heroui::fltk::input::Input::from_dyn_widget(&w).is_some());
+                let on_button = app::focus().is_some_and(|w| heroui::fltk::button::Button::from_dyn_widget(&w).is_some());
+                match k {
+                    // Moving in the files: Enter then means the file.
+                    Key::Up | Key::Down | Key::PageUp | Key::PageDown => IN_LIST.with(|l| l.set(true)),
+                    // Moving between buttons: Enter presses them.
+                    Key::Tab | Key::Left | Key::Right => IN_LIST.with(|l| l.set(false)),
+                    _ => {}
+                }
+                // Typing a name while on a button (save dialogs).
+                let text = app::event_text();
+                if on_button && !st.intersects(EventState::Ctrl | EventState::Alt | EventState::Meta) && text.chars().next().is_some_and(|c| !c.is_control() && c != ' ') {
+                    if let Some(mut input) = NAME_FIELD.with(|n| n.borrow().clone()).filter(|i| i.visible_r()) {
+                        let _ = input.take_focus();
+                        if let Some(mut i) = heroui::fltk::input::Input::from_dyn_widget(&input) {
+                            // What's typed replaces the name, like a selected field.
+                            let len = i.value().len() as i32;
+                            let _ = i.set_position(0);
+                            let _ = i.set_mark(len);
+                        }
+                        // The key goes on to the field.
+                        return false;
+                    }
+                }
                 let msg = match k {
                     Key::Escape => Msg::Cancel,
                     Key::Up if st.contains(EventState::Alt) => Msg::Up,
@@ -597,7 +623,9 @@ fn file_list() -> Element<Dialog, Msg> {
                     Key::Home if !typing => Msg::Move(Move::Home),
                     Key::End if !typing => Msg::Move(Move::End),
                     Key::BackSpace if !typing => Msg::Up,
-                    Key::Enter | Key::KPEnter if !typing => Msg::Enter,
+                    // On a button, Enter presses it (HeroUI), unless the
+                    // arrows were last moving in the files.
+                    Key::Enter | Key::KPEnter if !typing && (!on_button || IN_LIST.with(Cell::get)) => Msg::Enter,
                     k if st.contains(EventState::Ctrl) && k == Key::from_char('h') => Msg::Move(Move::By(0)),
                     _ => return false,
                 };
@@ -651,7 +679,21 @@ fn note(f: impl Fn(&Dialog) -> String + 'static) -> Element<Dialog, Msg> {
     })
 }
 
-thread_local!(static HIDDEN: Cell<bool> = const { Cell::new(false) });
+thread_local! {
+    static HIDDEN: Cell<bool> = const { Cell::new(false) };
+    /// The arrows last moved in the file list (not between buttons).
+    static IN_LIST: Cell<bool> = const { Cell::new(false) };
+    /// The save dialog's name field, for typing into from anywhere.
+    static NAME_FIELD: RefCell<Option<heroui::fltk::widget::Widget>> = const { RefCell::new(None) };
+}
+
+fn remember_name_field(field: Element<Dialog, Msg>) -> Element<Dialog, Msg> {
+    Element::new(move |ctx| {
+        let w = field.build(ctx);
+        NAME_FIELD.with(|n| *n.borrow_mut() = Some(w.clone()));
+        w
+    })
+}
 
 /// Shows the dialog for `req`; prints the answer and exits.
 pub fn run(req: Request, plain: bool) -> ! {
