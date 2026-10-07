@@ -1,0 +1,46 @@
+[package]
+name = "heroportal"
+version = "0.1.0"
+edition = "2021"
+description = "Desktop portal for HeroineOS: a lightweight file chooser (open/save dialogs) for every app"
+license = "MIT"
+repository = "https://github.com/HeroineOS/HeroPortal"
+
+[dependencies]
+heroui = { git = "https://github.com/HeroineOS/HeroUI", features = ["layer-shell"] }
+dbus = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The HeroineOS fltk-sys fork: Wayland touch, layer-shell, dialogs of other
+# programs' windows (xdg-foreign).
+[patch.crates-io]
+fltk-sys = { git = "https://github.com/HeroineOS/fltk-sys" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[package.metadata.deb]
+maintainer = "HeroineOS <https://github.com/HeroineOS>"
+copyright = "HeroineOS contributors"
+section = "x11"
+priority = "optional"
+depends = "$auto"
+recommends = "xdg-desktop-portal"
+extended-description = """\
+The open and save dialogs of HeroineOS, for every app that asks the desktop \
+portal for them (Firefox, Chromium, Flatpak apps, GTK and Qt apps set to use \
+portals). Built on HeroUI: it starts when an app asks, takes a few megabytes \
+while the dialog is open, and exits after. On HeroWM the dialog floats over \
+the app that asked."""
+assets = [
+    ["target/release/heroportal", "usr/bin/", "755"],
+    ["res/hero.portal", "usr/share/xdg-desktop-portal/portals/hero.portal", "644"],
+    ["res/org.freedesktop.impl.portal.desktop.hero.service", "usr/share/dbus-1/services/", "644"],
+    ["res/fht-compositor-portals.conf", "etc/xdg/xdg-desktop-portal/fht-compositor-portals.conf", "644"],
+    ["README.md", "usr/share/doc/heroportal/README.md", "644"],
+]
+conf-files = ["/etc/xdg/xdg-desktop-portal/fht-compositor-portals.conf"]
