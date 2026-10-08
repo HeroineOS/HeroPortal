@@ -557,13 +557,13 @@ fn file_list() -> Element<Dialog, Msg> {
                 match ev {
                     Event::Enter | Event::Move => {
                         if hover.replace(row) != row {
-                            f.redraw();
+                            heroui::widgets::repaint(f);
                         }
                         true
                     }
                     Event::Leave => {
                         if hover.replace(None).is_some() {
-                            f.redraw();
+                            heroui::widgets::repaint(f);
                         }
                         true
                     }
