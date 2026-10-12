@@ -145,6 +145,7 @@ pub fn mime_globs(mime: &str) -> Vec<String> {
         }
         v
     });
+    let known = builtin_globs(mime);
     let prefix = mime.strip_suffix("/*").map(|p| format!("{p}/"));
     DB.with(|db| {
         let mut out: Vec<String> = db
@@ -156,12 +157,39 @@ pub fn mime_globs(mime: &str) -> Vec<String> {
             .map(|(_, g)| g.clone())
             .collect();
         out.dedup();
+        if out.is_empty() {
+            out = known;
+        }
         out
     })
 }
 
+/// The usual extensions when the MIME database isn't installed.
+fn builtin_globs(mime: &str) -> Vec<String> {
+    let exts: &[&str] = match mime {
+        "image/*" => &["png", "jpg", "jpeg", "jpe", "gif", "webp", "bmp", "svg", "tif", "tiff", "avif", "ico"],
+        "image/jpeg" => &["jpg", "jpeg", "jpe"],
+        "image/png" => &["png"],
+        "image/gif" => &["gif"],
+        "image/webp" => &["webp"],
+        "image/svg+xml" => &["svg"],
+        "image/avif" => &["avif"],
+        "audio/*" => &["mp3", "ogg", "oga", "opus", "flac", "wav", "m4a", "aac"],
+        "video/*" => &["mp4", "mkv", "webm", "avi", "mov", "ogv", "m4v"],
+        "text/plain" => &["txt", "text"],
+        "text/html" => &["html", "htm"],
+        "application/pdf" => &["pdf"],
+        "application/zip" => &["zip"],
+        _ => &[],
+    };
+    exts.iter().map(|e| format!("*.{e}")).collect()
+}
+
 /// Whether `name` (a file) passes `filter`.
 pub fn passes(filter: &Filter, name: &str) -> bool {
+    if filter.globs.is_empty() && filter.mimes.is_empty() {
+        return true;
+    }
     filter.globs.iter().any(|g| glob(g, name)) || filter.mimes.iter().any(|m| mime_globs(m).iter().any(|g| glob(g, name)))
 }
 

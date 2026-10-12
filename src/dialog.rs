@@ -21,6 +21,7 @@ use heroui::fltk::prelude::*;
 use heroui::prelude::*;
 
 use crate::files::{self, Entry};
+use crate::request::Filter;
 use crate::request::{Answer, Mode, Request};
 
 const ROW_H: i32 = 30;
@@ -41,6 +42,11 @@ enum Msg {
     Click { row: usize, ctrl: bool, shift: bool },
     Activate(usize),
     Move(Move),
+    Extend(Move),
+    NewFolder,
+    NewFolderName(String),
+    NewFolderMake,
+    NewFolderCancel,
     /// Enter outside the text fields.
     Enter,
     Name(String),
@@ -75,11 +81,27 @@ struct Dialog {
     name: String,
     /// Chosen paths that exist, waiting for "Replace".
     confirm: Option<Vec<String>>,
+    /// The name being typed for a new folder.
+    new_folder: Option<String>,
     error: String,
 }
 
 impl Dialog {
-    fn new(req: Request, plain: bool) -> Dialog {
+    fn new(mut req: Request, plain: bool) -> Dialog {
+        if req.mode != Mode::SaveFiles && !req.directory {
+            if req.filters.is_empty() {
+                // A save dialog with no types offers the name's own type.
+                let ext = req.name.as_deref().or(req.file.as_deref()).and_then(|n| Path::new(n).extension()).map(|e| e.to_string_lossy().into_owned());
+                if let (Mode::Save, Some(ext)) = (req.mode, ext) {
+                    req.filters.push(Filter { name: format!(".{ext} files"), globs: vec![format!("*.{ext}")], mimes: vec![] });
+                    req.current_filter = Some(0);
+                }
+            }
+            // Always a way to see everything.
+            if !req.filters.is_empty() && !req.filters.iter().any(|f| f.globs.iter().any(|g| g == "*")) {
+                req.filters.push(Filter { name: "All files".into(), globs: vec!["*".into()], mimes: vec![] });
+            }
+        }
         let start = req
             .folder
             .clone()
@@ -106,6 +128,7 @@ impl Dialog {
             path_text: String::new(),
             name,
             confirm: None,
+            new_folder: None,
             error: String::new(),
         };
         d.go(&start, None);
@@ -321,6 +344,43 @@ impl App for Dialog {
                 self.cursor = Some(row);
                 self.picked(row);
             }
+            Msg::Extend(m) => {
+                let n = self.shown.len();
+                if n == 0 || !self.req.multiple {
+                    return self.update(Msg::Move(m));
+                }
+                let c = match (m, self.cursor) {
+                    (Move::Home, _) => 0,
+                    (Move::End, _) => n - 1,
+                    (Move::By(d), None) => if d < 0 { n - 1 } else { 0 },
+                    (Move::By(d), Some(c)) => (c as i64 + d as i64).clamp(0, n as i64 - 1) as usize,
+                };
+                let a = *self.anchor.get_or_insert(c);
+                self.sel = (a.min(c)..=a.max(c)).collect();
+                self.cursor = Some(c);
+                self.reveal += 1;
+            }
+            Msg::NewFolder => self.new_folder = Some(String::new()),
+            Msg::NewFolderName(n) => self.new_folder = Some(n),
+            Msg::NewFolderCancel => self.new_folder = None,
+            Msg::NewFolderMake => {
+                let name = self.new_folder.clone().unwrap_or_default();
+                let name = name.trim();
+                if name.is_empty() || name.contains('/') || name == "." || name == ".." {
+                    self.error = "A folder name can't be empty or hold a slash.".into();
+                } else {
+                    let path = self.dir.join(name);
+                    match std::fs::create_dir(&path) {
+                        Ok(()) => {
+                            self.new_folder = None;
+                            let dir = self.dir.clone();
+                            self.go(&dir, None);
+                            self.go(&path, None);
+                        }
+                        Err(e) => self.error = format!("Can't make {}: {}", path.display(), e.kind()),
+                    }
+                }
+            }
             Msg::Activate(row) => return self.activate(row),
             Msg::Move(m) => {
                 let n = self.shown.len();
@@ -388,14 +448,23 @@ impl App for Dialog {
 
     fn view(&self) -> Element<Self, Msg> {
         let save = self.req.mode == Mode::Save;
-        let has_filters = self.filter_names.len() > 1;
+        let has_filters = !self.filter_names.is_empty();
         let places: Vec<Element<Dialog, Msg>> = (0..self.places.len()).map(|i| place_button(i).fixed(34)).chain([spacer()]).collect();
         column(vec![
             row(vec![
                 button("Up", Msg::Up).fixed(64),
                 text_input_submit(|d: &Dialog| d.path_text.clone(), Msg::PathTyped, Msg::PathGo),
+                button("New folder", Msg::NewFolder).fixed(110).visible(|d: &Dialog| d.req.mode != Mode::Open || d.req.directory),
             ])
             .fixed(34),
+            row(vec![
+                label("New folder").fixed(90),
+                text_input_submit(|d: &Dialog| d.new_folder.clone().unwrap_or_default(), Msg::NewFolderName, Msg::NewFolderMake),
+                button("Cancel", Msg::NewFolderCancel).fixed(90),
+                primary_button("Create", Msg::NewFolderMake).fixed(90),
+            ])
+            .fixed(34)
+            .visible(|d: &Dialog| d.new_folder.is_some()),
             row(vec![column(places).spacing(2).fixed(170), scroll(vec![file_list()])]),
             row(vec![label("Name").fixed(60), remember_name_field(text_input_submit(|d: &Dialog| d.name.clone(), Msg::Name, Msg::Accept))])
                 .fixed(34)
@@ -628,6 +697,10 @@ fn file_list() -> Element<Dialog, Msg> {
                     Key::Enter | Key::KPEnter if !typing && (!on_button || IN_LIST.with(Cell::get)) => Msg::Enter,
                     k if st.contains(EventState::Ctrl) && k == Key::from_char('h') => Msg::Move(Move::By(0)),
                     _ => return false,
+                };
+                let msg = match msg {
+                    Msg::Move(m) if st.contains(EventState::Shift) && !matches!(m, Move::By(0)) && !typing => Msg::Extend(m),
+                    other => other,
                 };
                 if let Msg::Move(Move::By(0)) = msg {
                     // Ctrl+H: hidden files.
