@@ -5,6 +5,7 @@ mod dialog;
 mod files;
 mod request;
 mod service;
+mod setup;
 
 use request::{Mode, Request};
 
@@ -17,6 +18,8 @@ Usage:
   heroportal open [--multiple] [--folder] [--title T] [--in FOLDER]
   heroportal save [--name NAME] [--title T] [--in FOLDER]
                              show a dialog; print the chosen paths
+  heroportal status          is the portal set up to use HeroPortal's dialogs?
+  heroportal use             set it up (portal config, display for D-Bus) and restart the portal
   heroportal --dialog        a dialog for the request (JSON) on stdin
   heroportal --version
   heroportal --help",
@@ -59,6 +62,17 @@ fn main() {
                 }
             }
             dialog::run(req, true)
+        }
+        Some("status") => {
+            if !setup::status() {
+                std::process::exit(1);
+            }
+        }
+        Some("use") => {
+            if let Err(e) = setup::use_it() {
+                eprintln!("heroportal: {e}");
+                std::process::exit(1);
+            }
         }
         Some("-V" | "--version") => println!("heroportal {}", env!("CARGO_PKG_VERSION")),
         Some("-h" | "--help") => usage(),

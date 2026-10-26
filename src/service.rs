@@ -150,7 +150,32 @@ fn handle(msg: Message, conn: &LocalConnection, pending: &Rc<RefCell<Vec<Pending
 /// The dialog process, given the request.
 fn start(req: &Request) -> std::io::Result<Child> {
     let exe = std::env::current_exe()?;
-    let mut child = Command::new(exe).arg("--dialog").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()?;
+    let mut cmd = Command::new(exe);
+    cmd.arg("--dialog").stdin(Stdio::piped()).stdout(Stdio::piped());
+    // Started by D-Bus, the service may not know which screen to use.
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| {
+        extern "C" {
+            fn getuid() -> u32;
+        }
+        std::path::PathBuf::from(format!("/run/user/{}", unsafe { getuid() }))
+    });
+    cmd.env("XDG_RUNTIME_DIR", &runtime);
+    if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+        let mut found: Vec<String> = std::fs::read_dir(&runtime)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|n| n.starts_with("wayland-") && !n.ends_with(".lock"))
+            .collect();
+        found.sort();
+        if let Some(w) = found.first() {
+            cmd.env("WAYLAND_DISPLAY", w);
+        } else if std::env::var_os("DISPLAY").is_none() && std::path::Path::new("/tmp/.X11-unix/X0").exists() {
+            cmd.env("DISPLAY", ":0");
+        }
+    }
+    let mut child = cmd.spawn()?;
     let json = serde_json::to_string(req).map_err(std::io::Error::other)?;
     if std::env::var_os("HEROPORTAL_DEBUG").is_some() {
         eprintln!("heroportal: {json}");

@@ -71,3 +71,9 @@ cargo build --release
 ```
 
 It builds for x86_64, arm64, i686 and armv7.
+
+## Not getting HeroPortal's dialogs?
+
+Run `heroportal status` to see why, and `heroportal use` to fix it: it writes
+the user-level `portals.conf` choosing HeroPortal for file dialogs, passes the
+display to D-Bus-started services, and restarts `xdg-desktop-portal`.
